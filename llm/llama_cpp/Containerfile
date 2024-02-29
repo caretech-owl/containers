@@ -1,0 +1,33 @@
+ARG PYTHON_VERSION=3.11
+
+FROM python:${PYTHON_VERSION} as build
+
+WORKDIR /tmp
+
+RUN wget -O archive.tar.gz https://github.com/ggerganov/llama.cpp/archive/refs/tags/b2296.tar.gz \
+ && tar -xzf archive.tar.gz --one-top-level=llama_cpp --strip-components 1 \
+ && rm archive.tar.gz
+
+RUN cd llama_cpp \
+    #  Detect whether the container is running on an ARM64 architecture and set the appropriate flags
+    && if [ "$(python -c "import platform; print(platform.machine())")" = "aarch64" ]; \
+    then export UNAME_M=arm64 UNAME_p=arm LLAMA_NO_METAL=1; fi \
+    && make
+
+FROM python:${PYTHON_VERSION}-slim 
+
+RUN useradd -d /app user \
+ && mkdir /app \
+ && chown -R user:user /app
+
+COPY --chown=user:user --from=build /tmp/llama_cpp /app/llama_cpp
+
+USER user
+WORKDIR /app/llama_cpp
+ENV PATH=/app/.local/bin:$PATH
+ENV LC_ALL=C.utf8
+
+RUN pip install --user --upgrade pip setuptools wheel \
+    && pip install --user -r requirements.txt
+
+ENTRYPOINT ["/app/llama_cpp/.devops/tools.sh"]

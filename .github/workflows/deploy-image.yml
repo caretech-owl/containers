@@ -1,0 +1,39 @@
+name: build-and-deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/Containerfile"
+
+jobs:
+  gen-matrix:
+    name: generate-matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calculate file differences
+        id: diff
+        uses: tj-actions/changed-files@v35
+        with:
+          json: true
+          json_raw_format: true
+
+      - name: Generate testing matrix
+        uses: actions/github-script@v6
+        id: generator
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = require(`${process.env.GITHUB_WORKSPACE}/genMatrix.js`)
+            return script(
+              ${{ steps.diff.outputs.added_files }},
+              ${{ steps.diff.outputs.modified_files }},
+              ${{ steps.diff.outputs.renamed_files }},
+            );
+    outputs:
+      matrix: ${{ steps.generator.outputs.result }}
